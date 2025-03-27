@@ -1,3 +1,5 @@
 fastapi
 uvicorn
-pydantic
+sentence-transformers[sentencepiece]
+scikit-learn
+numpy
