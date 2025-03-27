@@ -113,4 +113,10 @@ def get_recommendations(req: RecommendRequest):
             }
             results.append(match)
 
-    return sorted(results, key=lambda x: x["score"], reverse=True)[:10]
+    seen = {}
+    for option in sorted(results, key=lambda x: x["score"], reverse=True):
+        eq_id = option["equipment_id"]
+        if eq_id not in seen:
+            seen[eq_id] = option
+
+    return list(seen.values())[:100]
