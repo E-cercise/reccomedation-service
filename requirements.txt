@@ -3,3 +3,4 @@ uvicorn
 sentence-transformers[sentencepiece]
 scikit-learn
 numpy
+python-dotenv
