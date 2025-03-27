@@ -9,48 +9,51 @@ def has(text, tag):
 
 def rule_based_score(option, req: RecommendRequest, text: str):
     score = 0
-    tags = set(option.get("tags", []))
-    attrs = set(option.get("attribute_values", []))
+    tags = set([t.lower() if isinstance(t, str) else t.get("name", "").lower() for t in option.get("tags", [])])
+    attrs = set([a.lower() for a in option.get("attribute_values", [])])
 
-    def has(tag): return tag.lower() in text
+    def has_tag(name): return name.lower() in tags
+    def has_attr(name): return name.lower() in attrs
+    def has_text(name): return name.lower() in text
 
-    # 🔹 Base Tag Weight Boosting by Preference
+    # 🔸 Preference Matching
     for pref in req.preferences or []:
         if pref.tag:
-            if has(pref.tag):
-                score += 5
-            if pref.group == "muscle" and has(pref.tag):
-                score += 3
-            if pref.group == "goal" and has(pref.tag):
-                score += 3
+            if has_tag(pref.tag): score += 6
+            if has_text(pref.tag): score += 3
+            if pref.group == "muscle" and has_tag(pref.tag): score += 4
+            if pref.group == "goal" and has_tag(pref.tag): score += 4
         if pref.max_price and option["price"] <= pref.max_price:
             score += 5
         if pref.min_weight and option["weight"] >= pref.min_weight:
             score += 5
 
-    # 🔹 Gender-aware boost
-    if req.gender == "female":
-        if any(t in text for t in ["glutes", "core", "abs"]):
-            score += 6
-        if "compact" in text or "adjustable" in text:
-            score += 3
-    elif req.gender == "male":
-        if any(t in text for t in ["arms", "chest", "pull-up"]):
-            score += 6
-        if "heavy" in text or option["weight"] >= 60:
-            score += 4
+    # 🔸 Attribute Bonus
+    if has_attr("adjustable"): score += 2
+    if has_attr("compact"): score += 2
+    if has_attr("portable"): score += 1
+    if has_attr("foldable"): score += 1
+    if has_attr("budget"): score += 1
+    if has_attr("multi-function"): score += 2
 
-    # 🔹 Age-aware logic
+    # 🔸 Gender-based muscle focus
+    if req.gender == "female":
+        if has_tag("glutes") or has_tag("core") or has_tag("abs"): score += 6
+        if has_attr("compact") or has_attr("adjustable"): score += 3
+    elif req.gender == "male":
+        if has_tag("arms") or has_tag("chest") or has_tag("pull-up"): score += 6
+        if "heavy" in text or option.get("weight", 0) >= 60: score += 4
+
+    # 🔸 Age-based logic
     if req.age:
         if req.age >= 50:
-            if any(t in text for t in ["low-impact", "joint-friendly", "post-injury"]):
+            if has_tag("low-impact") or has_tag("joint-friendly") or has_tag("post-injury"):
                 score += 10
-            if option["weight"] < 40:
-                score += 4
+            if option.get("weight", 0) < 40: score += 4
         elif req.age < 18:
-            score += 3  # youth-friendly content
+            score += 3  # general bonus for youth-safe
 
-    # 🔹 Goal → Tag Mapping
+    # 🔸 Goal → Tag mapping
     goal_tags = {
         "tone": ["bodyweight", "multi-function", "compact"],
         "build-muscle": ["resistance", "weighted", "barbell-compatible"],
@@ -67,25 +70,25 @@ def rule_based_score(option, req: RecommendRequest, text: str):
         "functionality": ["full-body", "multi-function"]
     }
 
-    if req.goal and req.goal in goal_tags:
+    if req.goal in goal_tags:
         for tag in goal_tags[req.goal]:
-            if has(tag):
-                score += 4
+            if has_tag(tag): score += 4
+            if has_attr(tag): score += 2
 
-    # 🔹 Experience-based bias
+    # 🔸 Experience-aware tag matching
     if req.experience:
         exp = req.experience.lower()
-        if exp == "beginner" and has("beginner-friendly"):
+        if exp == "beginner" and has_tag("beginner-friendly"):
             score += 6
-        if exp == "intermediate" and has("intermediate"):
+        if exp == "intermediate" and has_tag("intermediate"):
             score += 4
-        if exp == "advanced" and has("advanced"):
+        if exp == "advanced" and has_tag("advanced"):
             score += 4
         if exp == "athlete":
-            if has("athlete") or option["weight"] > 80:
+            if has_tag("athlete") or option.get("weight", 0) > 80:
                 score += 6
         if exp == "elderly":
-            if any(t in text for t in ["low-impact", "joint-friendly", "elderly"]):
+            if has_tag("elderly") or has_tag("joint-friendly") or has_attr("low-impact"):
                 score += 8
 
     return score
