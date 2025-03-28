@@ -135,7 +135,8 @@ def get_recommendations(req: RecommendRequest):
     seen = {}
     for option in sorted(results, key=lambda x: x["score"], reverse=True):
         eq_id = option.get("equipment_id")
-        print("eqID", eq_id)
         if eq_id not in seen:
             seen[eq_id] = option
-    return list(seen.values())[:100]
+
+    sorted_results = sorted(seen.values(), key=lambda x: x["score"], reverse=True)
+    return sorted_results[:100]
