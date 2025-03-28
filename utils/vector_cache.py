@@ -1,15 +1,20 @@
 import json
-import numpy as np
-from sentence_transformers import SentenceTransformer
+import os
 
-with open("data/equipment_options.json") as f:
-    EQUIPMENT_DATA = json.load(f)
+VECTOR_CACHE_PATH = "data/vector_cache.json"
 
-with open("data/equipment_vector_cache.json") as f:
-    cache = json.load(f)
+def save_vector_cache(cache):
+    with open(VECTOR_CACHE_PATH, "w") as f:
+        json.dump(cache, f)
 
-VECTORS = np.array(cache["vectors"])
-IDS = cache["ids"]
-TEXTS = cache["texts"]
+def load_vector_cache():
+    if not os.path.exists(VECTOR_CACHE_PATH):
+        return {}
+    with open(VECTOR_CACHE_PATH, "r") as f:
+        return json.load(f)
 
-MODEL = SentenceTransformer("all-MiniLM-L6-v2")
+def get_vector_for_option(option_id, vector_cache):
+    return vector_cache.get(option_id)
+
+def get_all_vectors():
+    return load_vector_cache()

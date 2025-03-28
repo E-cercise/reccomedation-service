@@ -1,30 +1,36 @@
-from sentence_transformers import SentenceTransformer
 import json
-import uuid
-import os
+from sentence_transformers import SentenceTransformer
+from utils.text import clean_text
+from utils.vector_cache import save_vector_cache
 
-def build_equipment_text(option):
-    tags = [
-        f"{tag['group']}:{tag['name']}" if isinstance(tag, dict) and 'group' in tag else tag
-        for tag in option.get("tags", [])
-    ]
-    attrs = option.get("attribute_values", [])
-    return " ".join(tags + attrs)
+model = SentenceTransformer("all-MiniLM-L6-v2")
+INPUT_JSON_PATH = "data/equipment_options_with_tags.json"
 
-with open("data/equipment_options.json") as f:
-    data = json.load(f)
+def generate_vector_cache():
+    with open(INPUT_JSON_PATH, "r") as file:
+        equipment_options = json.load(file)
 
-texts = [build_equipment_text(opt) for opt in data]
-ids = [opt.get("id") or opt.get("equipment_option_id") or str(uuid.uuid4()) for opt in data]
+    vector_cache = {}
 
-model = SentenceTransformer('all-MiniLM-L6-v2')
-vectors = model.encode(texts, convert_to_tensor=False)
+    for option in equipment_options:
+        option_id = option.get("option_id")
+        if not option_id:
+            continue
 
-with open("data/equipment_vector_cache.json", "w") as f:
-    json.dump({
-        "ids": ids,
-        "texts": texts,
-        "vectors": [v.tolist() for v in vectors]
-    }, f)
+        fields = [
+            option.get("equipment_name", ""),
+            option.get("brand", ""),
+            option.get("model", ""),
+            option.get("color", ""),
+            option.get("material", "")
+        ]
+        fields += list(option.get("attributes", {}).values())
+        fields += option.get("tags", [])
 
-print("✅ equipment_vector_cache.json generated")
+        full_text = clean_text(" ".join(fields))
+        vector_cache[option_id] = model.encode(full_text, convert_to_tensor=False).tolist()
+
+    save_vector_cache(vector_cache)
+
+if __name__ == "__main__":
+    generate_vector_cache()

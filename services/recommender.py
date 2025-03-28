@@ -1,14 +1,28 @@
 import json
 from sklearn.metrics.pairwise import cosine_similarity
-from utils.text import build_user_text
-from utils.vector_cache import MODEL, VECTORS, TEXTS, IDS, EQUIPMENT_DATA
+from sentence_transformers import SentenceTransformer
+from utils.text import build_user_text, clean_text
 from models.schema import RecommendRequest
+
+MODEL = SentenceTransformer("all-MiniLM-L6-v2")
+
+with open("data/vector_cache.json", "r") as f:
+    vector_data = json.load(f)
+
+VECTORS = [v for v in vector_data.values()]
+IDS = [k for k in vector_data.keys()]
+TEXTS = [clean_text(" ".join(map(str, v))) if isinstance(v, list) else "" for v in vector_data.values()]
+
+with open("data/equipment_options_with_tags.json", "r") as f:
+    EQUIPMENT_DATA = json.load(f)
 
 def has(text, tag):
     return tag.lower() in text
 
 def rule_based_score(option, req: RecommendRequest, text: str):
     score = 0
+    debug = {}
+
     tags = set([t.lower() if isinstance(t, str) else t.get("name", "").lower() for t in option.get("tags", [])])
     attrs = set([a.lower() for a in option.get("attribute_values", [])])
 
@@ -19,39 +33,38 @@ def rule_based_score(option, req: RecommendRequest, text: str):
     # 🔸 Preference Matching
     for pref in req.preferences or []:
         if pref.tag:
-            if has_tag(pref.tag): score += 6
-            if has_text(pref.tag): score += 3
-            if pref.group == "muscle" and has_tag(pref.tag): score += 4
-            if pref.group == "goal" and has_tag(pref.tag): score += 4
+            if has_tag(pref.tag): score += 6; debug[f"pref:tag:{pref.tag}"] = 6
+            if has_text(pref.tag): score += 3; debug[f"pref:text:{pref.tag}"] = 3
+            if pref.group == "muscle" and has_tag(pref.tag): score += 4; debug[f"pref:muscle:{pref.tag}"] = 4
+            if pref.group == "goal" and has_tag(pref.tag): score += 4; debug[f"pref:goal:{pref.tag}"] = 4
         if pref.max_price and option["price"] <= pref.max_price:
-            score += 5
+            score += 5; debug[f"pref:max_price:{pref.max_price}"] = 5
         if pref.min_weight and option["weight"] >= pref.min_weight:
-            score += 5
+            score += 5; debug[f"pref:min_weight:{pref.min_weight}"] = 5
 
     # 🔸 Attribute Bonus
-    if has_attr("adjustable"): score += 2
-    if has_attr("compact"): score += 2
-    if has_attr("portable"): score += 1
-    if has_attr("foldable"): score += 1
-    if has_attr("budget"): score += 1
-    if has_attr("multi-function"): score += 2
+    for attr, val in {
+        "adjustable": 2, "compact": 2, "portable": 1,
+        "foldable": 1, "budget": 1, "multi-function": 2
+    }.items():
+        if has_attr(attr): score += val; debug[f"attr:{attr}"] = val
 
     # 🔸 Gender-based muscle focus
     if req.gender == "female":
-        if has_tag("glutes") or has_tag("core") or has_tag("abs"): score += 6
-        if has_attr("compact") or has_attr("adjustable"): score += 3
+        if any(has_tag(tag) for tag in ["glutes", "core", "abs"]): score += 6; debug["gender:female:glutes/core/abs"] = 6
+        if any(has_attr(attr) for attr in ["compact", "adjustable"]): score += 3; debug["gender:female:compact/adjustable"] = 3
     elif req.gender == "male":
-        if has_tag("arms") or has_tag("chest") or has_tag("pull-up"): score += 6
-        if "heavy" in text or option.get("weight", 0) >= 60: score += 4
+        if any(has_tag(tag) for tag in ["arms", "chest", "pull-up"]): score += 6; debug["gender:male:arms/chest/pull-up"] = 6
+        if "heavy" in text or option.get("weight", 0) >= 60: score += 4; debug["gender:male:heavy_or_weight>=60"] = 4
 
     # 🔸 Age-based logic
     if req.age:
         if req.age >= 50:
-            if has_tag("low-impact") or has_tag("joint-friendly") or has_tag("post-injury"):
-                score += 10
-            if option.get("weight", 0) < 40: score += 4
+            if any(has_tag(tag) for tag in ["low-impact", "joint-friendly", "post-injury"]):
+                score += 10; debug["age:50+:safety_tags"] = 10
+            if option.get("weight", 0) < 40: score += 4; debug["age:50+:weight<40"] = 4
         elif req.age < 18:
-            score += 3  # general bonus for youth-safe
+            score += 3; debug["age<18"] = 3
 
     # 🔸 Goal → Tag mapping
     goal_tags = {
@@ -69,29 +82,34 @@ def rule_based_score(option, req: RecommendRequest, text: str):
         "injury-prevention": ["joint-friendly", "adjustable"],
         "functionality": ["full-body", "multi-function"]
     }
-
     if req.goal in goal_tags:
         for tag in goal_tags[req.goal]:
-            if has_tag(tag): score += 4
-            if has_attr(tag): score += 2
+            if has_tag(tag): score += 4; debug[f"goal:tag:{tag}"] = 4
+            if has_attr(tag): score += 2; debug[f"goal:attr:{tag}"] = 2
 
     # 🔸 Experience-aware tag matching
-    if req.experience:
-        exp = req.experience.lower()
-        if exp == "beginner" and has_tag("beginner-friendly"):
-            score += 6
-        if exp == "intermediate" and has_tag("intermediate"):
-            score += 4
-        if exp == "advanced" and has_tag("advanced"):
-            score += 4
-        if exp == "athlete":
-            if has_tag("athlete") or option.get("weight", 0) > 80:
-                score += 6
-        if exp == "elderly":
-            if has_tag("elderly") or has_tag("joint-friendly") or has_attr("low-impact"):
-                score += 8
+    exp = (req.experience or "").lower()
+    if exp == "beginner" and has_tag("beginner-friendly"): score += 6; debug["exp:beginner"] = 6
+    if exp == "intermediate" and has_tag("intermediate"): score += 4; debug["exp:intermediate"] = 4
+    if exp == "advanced" and has_tag("advanced"): score += 4; debug["exp:advanced"] = 4
+    if exp == "athlete":
+        if has_tag("athlete") or option.get("weight", 0) > 80: score += 6; debug["exp:athlete"] = 6
+    if exp == "elderly":
+        if has_tag("elderly") or has_tag("joint-friendly") or has_attr("low-impact"):
+            score += 8; debug["exp:elderly"] = 8
 
-    return score
+    # 🔸 New: weight and height consideration
+    if req.weight and req.weight >= 90:
+        score += 3; debug["user:weight>=90"] = 3
+    if req.height and req.height >= 190:
+        score += 2; debug["user:height>=190"] = 2
+
+    # 🔸 New: user_type
+    if req.user_type:
+        if req.user_type.lower() == "athlete": score += 3; debug["user_type:athlete"] = 3
+        elif req.user_type.lower() == "elderly": score += 5; debug["user_type:elderly"] = 5
+
+    return score, debug
 
 def get_recommendations(req: RecommendRequest):
     user_text = build_user_text(req)
@@ -100,23 +118,25 @@ def get_recommendations(req: RecommendRequest):
 
     results = []
     for i, sim in enumerate(similarities):
-        match = next((o for o in EQUIPMENT_DATA if str(o.get("id")) == IDS[i]), None)
+        match = next((o for o in EQUIPMENT_DATA if str(o.get("option_id")) == IDS[i]), None)
         if match:
             text = json.dumps(match).lower()
-            rules = rule_based_score(match, req, text)
+            rules, rule_debug = rule_based_score(match, req, text)
             match["score"] = float(sim * 10 + rules)
             match["__debug"] = {
                 "embedding_similarity": round(sim * 10, 2),
                 "rule_score": rules,
                 "user_text": user_text,
-                "equipment_text": TEXTS[i]
+                "equipment_text": TEXTS[i],
+                "rule_breakdown": rule_debug
             }
             results.append(match)
 
     seen = {}
     for option in sorted(results, key=lambda x: x["score"], reverse=True):
-        eq_id = option["equipment_id"]
+        eq_id = option.get("equipment_id")
+        print("eqID", eq_id)
         if eq_id not in seen:
             seen[eq_id] = option
-
+    print(list(seen.values())[0])
     return list(seen.values())[:100]
