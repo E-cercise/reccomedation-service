@@ -138,5 +138,4 @@ def get_recommendations(req: RecommendRequest):
         print("eqID", eq_id)
         if eq_id not in seen:
             seen[eq_id] = option
-    print(list(seen.values())[0])
     return list(seen.values())[:100]
