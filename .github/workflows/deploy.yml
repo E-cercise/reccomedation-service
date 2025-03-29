@@ -42,7 +42,7 @@ jobs:
         
       - name: Deploy to Google Cloud Run with Secrets
         run: |
-          gcloud run deploy e-cercise-backend \
+          gcloud run deploy e-cercise-recommend-service \
             --image=gcr.io/${{ secrets.GCP_PROJECT_ID }}/e-cercise-recommend-service:$GITHUB_SHA \
             --platform=managed \
             --region=asia-southeast1 \
