@@ -1,10 +1,17 @@
 import json
 from sklearn.metrics.pairwise import cosine_similarity
 from utils.text import build_user_text, clean_text
+from sentence_transformers import SentenceTransformer
 from models.schema import RecommendRequest
 
+MODEL = SentenceTransformer("all-MiniLM-L6-v2")
 
+with open("data/vector_cache.json", "r") as f:
+    vector_data = json.load(f)
 
+VECTORS = [v for v in vector_data.values()]
+IDS = [k for k in vector_data.keys()]
+TEXTS = [clean_text(" ".join(map(str, v))) if isinstance(v, list) else "" for v in vector_data.values()]
 
 
 with open("data/equipment_options_with_tags.json", "r") as f:
@@ -105,14 +112,9 @@ def rule_based_score(option, req: RecommendRequest, text: str):
 
     return score, debug
 
-def get_recommendations(req: RecommendRequest, app):
-    vector_data = app.state.vector_data  
-    VECTORS = [v for v in vector_data.values()]
-    IDS = [k for k in vector_data.keys()]
-    TEXTS = [clean_text(" ".join(map(str, v))) if isinstance(v, list) else "" for v in vector_data.values()]
-
+def get_recommendations(req: RecommendRequest):
     user_text = build_user_text(req)
-    user_vector = app.state.model.encode(user_text, convert_to_tensor=False).reshape(1, -1)
+    user_vector = MODEL.encode(user_text, convert_to_tensor=False).reshape(1, -1)
 
     similarities = cosine_similarity(user_vector, VECTORS)[0]
 

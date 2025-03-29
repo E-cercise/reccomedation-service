@@ -19,9 +19,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Now copy everything into /app
 COPY . .
 
-# Optional debug step
-RUN cat data/vector_cache.json
-
 # Cloud Run expects the container to listen on $PORT
 ENV PORT=8080
 
