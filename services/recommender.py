@@ -111,9 +111,9 @@ def rule_based_score(option, req: RecommendRequest, text: str):
 
     return score, debug
 
-def get_recommendations(req: RecommendRequest):
+def get_recommendations(req: RecommendRequest, app):
     user_text = build_user_text(req)
-    user_vector = MODEL.encode(user_text, convert_to_tensor=False).reshape(1, -1)
+    user_vector = app.state.model.encode(user_text, convert_to_tensor=False).reshape(1, -1)
     similarities = cosine_similarity(user_vector, VECTORS)[0]
 
     results = []
