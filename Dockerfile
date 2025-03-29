@@ -1,4 +1,4 @@
-FROM python:3.13.2-slim
+FROM python:3.13.2-slim-bookworm
 
 # System-level deps for torch & sentence-transformers
 RUN apt-get update && apt-get install -y \
@@ -9,13 +9,15 @@ RUN apt-get update && apt-get install -y \
     libxrender-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Set working directory BEFORE copying
+WORKDIR /app
+
 # Install Python deps
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Add your app
-COPY . /app
-WORKDIR /app
+# Now copy everything into /app
+COPY . .
 
 # Cloud Run expects the container to listen on $PORT
 ENV PORT=8080

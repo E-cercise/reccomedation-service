@@ -1,10 +1,8 @@
 import json
 from sklearn.metrics.pairwise import cosine_similarity
-from sentence_transformers import SentenceTransformer
 from utils.text import build_user_text, clean_text
 from models.schema import RecommendRequest
 
-MODEL = SentenceTransformer("all-MiniLM-L6-v2")
 
 with open("data/vector_cache.json", "r") as f:
     vector_data = json.load(f)
