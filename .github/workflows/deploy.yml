@@ -47,5 +47,6 @@ jobs:
             --platform=managed \
             --region=asia-southeast1 \
             --allow-unauthenticated \
+            --memory=2Gi \
             --port=8080 \
             --env-vars-file=env.yaml
