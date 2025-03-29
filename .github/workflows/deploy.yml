@@ -41,4 +41,4 @@ jobs:
             --region=asia-southeast1 \
             --allow-unauthenticated \
             --port=8080 \
-            --set-env-vars "BACKEND_URL=${{ secrets.BACKEND_URL }},RECOMMENDER_PORT=${{ secrets.RECOMMENDER_PORT}},ALLOWED_ORIGINS=${{ secrets.ALLOWED_ORIGINS }},DEBUG=${{ secrets.DEBUG }}"
+            --set-env-vars 'BACKEND_URL=${{ secrets.BACKEND_URL }},RECOMMENDER_PORT=${{ secrets.RECOMMENDER_PORT}},ALLOWED_ORIGINS=${{ secrets.ALLOWED_ORIGINS }},DEBUG=${{ secrets.DEBUG }}'
