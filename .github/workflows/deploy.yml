@@ -35,12 +35,11 @@ jobs:
 
       - name: Write env.yaml
         run: |
-          echo "envs:" > env.yaml
-          echo "  - BACKEND_URL: \"${{ secrets.BACKEND_URL }}\"" >> env.yaml
-          echo "  - RECOMMENDER_PORT: \"${{ secrets.RECOMMENDER_PORT }}\"" >> env.yaml
-          echo "  - ALLOWED_ORIGINS: \"${{ secrets.ALLOWED_ORIGINS }}\"" >> env.yaml
-          echo "  - DEBUG: \"${{ secrets.DEBUG }}\"" >> env.yaml
-
+          echo "BACKEND_URL: \"${{ secrets.BACKEND_URL }}\"" > env.yaml
+          echo "RECOMMENDER_PORT: \"${{ secrets.RECOMMENDER_PORT }}\"" >> env.yaml
+          echo "ALLOWED_ORIGINS: \"${{ secrets.ALLOWED_ORIGINS }}\"" >> env.yaml
+          echo "DEBUG: \"${{ secrets.DEBUG }}\"" >> env.yaml
+        
       - name: Deploy to Google Cloud Run with Secrets
         run: |
           gcloud run deploy e-cercise-backend \
