@@ -1,0 +1,44 @@
+name: Deploy to Google Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Authenticate with Google Cloud
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2.1.4
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Configure Docker authentication
+        run: gcloud auth configure-docker
+
+      - name: Build and push Docker image
+        run: |
+          IMAGE_NAME=gcr.io/${{ secrets.GCP_PROJECT_ID }}/e-cercise-recommend-service
+          docker build -t $IMAGE_NAME:$GITHUB_SHA .
+          docker push $IMAGE_NAME:$GITHUB_SHA
+
+      - name: Deploy to Google Cloud Run with Secrets
+        run: |
+          gcloud run deploy e-cercise-backend \
+            --image=gcr.io/${{ secrets.GCP_PROJECT_ID }}/e-cercise-recommend-service:$GITHUB_SHA \
+            --platform=managed \
+            --region=asia-southeast1 \
+            --allow-unauthenticated \
+            --port=8080 \
+            --set-env-vars "BACKEND_URL=${{ secrets.BACKEND_URL }},RECOMMENDER_PORT=${{ secrets.RECOMMENDER_PORT}},ALLOWED_ORIGINS=${{ secrets.ALLOWED_ORIGINS }},DEBUG=${{ secrets.DEBUG }}"
