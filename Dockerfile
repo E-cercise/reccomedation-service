@@ -1,4 +1,4 @@
-FROM python:3.13.2-slim-bookworm
+FROM python:3.13.2-slim
 
 # System-level deps for torch & sentence-transformers
 RUN apt-get update && apt-get install -y \
