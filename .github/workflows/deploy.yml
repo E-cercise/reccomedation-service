@@ -33,6 +33,14 @@ jobs:
           docker build -t $IMAGE_NAME:$GITHUB_SHA .
           docker push $IMAGE_NAME:$GITHUB_SHA
 
+      - name: Write env.yaml
+        run: |
+          echo "envs:" > env.yaml
+          echo "  - BACKEND_URL: \"${{ secrets.BACKEND_URL }}\"" >> env.yaml
+          echo "  - RECOMMENDER_PORT: \"${{ secrets.RECOMMENDER_PORT }}\"" >> env.yaml
+          echo "  - ALLOWED_ORIGINS: \"${{ secrets.ALLOWED_ORIGINS }}\"" >> env.yaml
+          echo "  - DEBUG: \"${{ secrets.DEBUG }}\"" >> env.yaml
+
       - name: Deploy to Google Cloud Run with Secrets
         run: |
           gcloud run deploy e-cercise-backend \
@@ -41,4 +49,4 @@ jobs:
             --region=asia-southeast1 \
             --allow-unauthenticated \
             --port=8080 \
-            --set-env-vars 'BACKEND_URL=${{ secrets.BACKEND_URL }},RECOMMENDER_PORT=${{ secrets.RECOMMENDER_PORT}},ALLOWED_ORIGINS=${{ secrets.ALLOWED_ORIGINS }},DEBUG=${{ secrets.DEBUG }}'
+            --env-vars-file=env.yaml
