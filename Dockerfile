@@ -19,6 +19,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Now copy everything into /app
 COPY . .
 
+RUN ls -l /app/data
+
+
 # Cloud Run expects the container to listen on $PORT
 ENV PORT=8080
 
