@@ -14,6 +14,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
+      - name: Install Git LFS
+        run: |
+          git lfs install
+          git lfs pull  # fetch actual LFS files
+
+      - name: List data folder
+        run: |
+          ls -lh data
+
       - name: Authenticate with Google Cloud
         uses: google-github-actions/auth@v1
         with:
