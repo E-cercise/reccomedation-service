@@ -1,24 +1,33 @@
 import json
+import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
-from utils.text import build_user_text, clean_text
 from sentence_transformers import SentenceTransformer
+from utils.text import build_user_text, clean_text
 from models.schema import RecommendRequest
 
+# Load model only once
 MODEL = SentenceTransformer("all-MiniLM-L6-v2")
 
+# Load & preprocess vector cache
 with open("data/vector_cache.json", "r") as f:
     vector_data = json.load(f)
 
-VECTORS = [v for v in vector_data.values()]
-IDS = [k for k in vector_data.keys()]
-TEXTS = [clean_text(" ".join(map(str, v))) if isinstance(v, list) else "" for v in vector_data.values()]
+VECTORS = np.array(list(vector_data.values()))  # for fast cosine_similarity
+IDS = list(vector_data.keys())
+ID_TO_INDEX = {k: i for i, k in enumerate(IDS)}
 
-
+# Load equipment data
 with open("data/equipment_options_with_tags.json", "r") as f:
     EQUIPMENT_DATA = json.load(f)
 
-def has(text, tag):
-    return tag.lower() in text
+# Create a fast lookup dict for option_id
+OPTION_BY_ID = {str(opt["option_id"]): opt for opt in EQUIPMENT_DATA if "option_id" in opt}
+
+# Utility to extract a flattened version of tag/attribute data for scoring
+def build_equipment_text(option):
+    tags = [t.get("name", "") for t in option.get("tags", [])]
+    attrs = option.get("attribute_values", [])
+    return clean_text(" ".join(tags + attrs))
 
 def rule_based_score(option, req: RecommendRequest, text: str):
     score = 0
@@ -120,25 +129,31 @@ def get_recommendations(req: RecommendRequest):
 
     results = []
     for i, sim in enumerate(similarities):
-        match = next((o for o in EQUIPMENT_DATA if str(o.get("option_id")) == IDS[i]), None)
-        if match:
-            text = json.dumps(match).lower()
-            rules, rule_debug = rule_based_score(match, req, text)
-            match["score"] = float(sim * 10 + rules)
-            match["__debug"] = {
-                "embedding_similarity": round(sim * 10, 2),
-                "rule_score": rules,
-                "user_text": user_text,
-                "equipment_text": TEXTS[i],
-                "rule_breakdown": rule_debug
-            }
-            results.append(match)
+        option_id = IDS[i]
+        match = OPTION_BY_ID.get(option_id)
+        if not match:
+            continue
 
+        # Build lightweight searchable string
+        text = match.get("_preprocessed_text") or build_equipment_text(match)
+
+        rule_score, rule_debug = rule_based_score(match, req, text)
+        match["score"] = float(sim * 10 + rule_score)
+        match["__debug"] = {
+            "embedding_similarity": round(sim * 10, 2),
+            "rule_score": rule_score,
+            "user_text": user_text,
+            "rule_breakdown": rule_debug
+        }
+
+        results.append(match)
+
+    # Deduplicate based on equipment_id
     seen = {}
     for option in sorted(results, key=lambda x: x["score"], reverse=True):
         eq_id = option.get("equipment_id")
         if eq_id not in seen:
             seen[eq_id] = option
 
-    sorted_results = sorted(seen.values(), key=lambda x: x["score"], reverse=True)
-    return sorted_results[:100]
+    # Return top 100
+    return sorted(seen.values(), key=lambda x: x["score"], reverse=True)[:100]
