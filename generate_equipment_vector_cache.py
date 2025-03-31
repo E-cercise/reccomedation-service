@@ -1,4 +1,4 @@
-import json
+import orjson as json
 from sentence_transformers import SentenceTransformer
 from utils.text import clean_text
 from utils.vector_cache import save_vector_cache
@@ -9,8 +9,8 @@ INPUT_JSON_PATH = "data/equipment_options_with_tags.json"
 OUTPUT_JSON_PATH = "data/equipment_options_with_tags.json"  # Overwrite with preprocessed data
 
 def generate_vector_cache():
-    with open(INPUT_JSON_PATH, "r") as file:
-        equipment_options = json.load(file)
+    with open(INPUT_JSON_PATH, "rb") as file:
+        equipment_options = json.loads(file.read())
 
     vector_cache = {}
 
@@ -41,8 +41,8 @@ def generate_vector_cache():
         vector_cache[option_id] = model.encode(full_text, convert_to_tensor=False).tolist()
 
     # Save updated equipment options JSON with `_preprocessed_text`
-    with open(OUTPUT_JSON_PATH, "w") as file:
-        json.dump(equipment_options, file, indent=2)
+    with open(OUTPUT_JSON_PATH, "wb") as file:
+        file.write(json.dumps(equipment_options))
 
     # Save vector cache
     save_vector_cache(vector_cache)

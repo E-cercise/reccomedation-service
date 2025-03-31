@@ -1,5 +1,6 @@
 # Re-run tag enrichment script after kernel reset
-import json
+import json as json1
+import orjson as json
 import re
 
 input_path = "data/equipment_options.json"
@@ -81,12 +82,13 @@ def extract_tags(option):
 
 
 with open(input_path, "r") as f:
-    equipment_options = json.load(f)
+    equipment_options = json1.load(f)
 
 for opt in equipment_options:
     opt["tags"] = extract_tags(opt)
 
-with open(output_path, "w") as f:
-    json.dump(equipment_options, f, indent=2)
+with open(output_path, "wb") as f:
+    f.write(json.dumps(equipment_options))
+    
 
 output_path
