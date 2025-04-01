@@ -42,6 +42,8 @@ def build_equipment_text(option):
 
 def vectorized_rule_scoring(df: pd.DataFrame, req: RecommendRequest):
     score = np.zeros(len(df))
+    explanations = [""] * len(df)  # Track rule explanations
+
 
     # Preprocess request
 
@@ -57,31 +59,46 @@ def vectorized_rule_scoring(df: pd.DataFrame, req: RecommendRequest):
     def attr_match(attr_set, attr): return attr in attr_set if attr else False
 
     for i, row in df.iterrows():
-        s = 0
+        s, reason = 0, []
         
         tag_intersection = pref_tags & row.tags
         s += len(tag_intersection) * 6
+        reason.append(f"Matched tags: {', '.join(tag_intersection)} (+{len(tag_intersection)*6})")
+
         
         text = row.text
         for tag in pref_tags:
             if tag in text:
                 s += 3
+                reason.append(f"Tag '{tag}' found in text (+3)")
+
 
         # Tag/Pref score
         for pref in req.preferences or []:
             tag = (pref.tag or "").lower()
-            if tag and tag in row.tags:
+            if tag and tag_match(row.tags, tag):
                 s += 6
+                reason.append(f"Direct tag match: {tag} (+6)")
+
             if tag and tag in row.text:
                 s += 3
-            if tag and pref.group == "muscle" and tag in row.tags:
+                reason.append(f"Tag in text: {tag} (+3)")
+
+            if tag and pref.group == "muscle" and tag_match(row.tags, tag):
                 s += 4
-            if tag and pref.group == "goal" and tag in row.tags:
+                reason.append(f"Muscle group match: {tag} (+4)")
+
+            if tag and pref.group == "goal" and tag_match(row.tags, tag):
                 s += 4
+                reason.append(f"Goal group match: {tag} (+4)")
+
             if pref.max_price and row.price <= pref.max_price:
                 s += 5
+                reason.append(f"Within price range (≤ {pref.max_price}) (+5)")
+
             if pref.min_weight and row.weight >= pref.min_weight:
                 s += 5
+                reason.append(f"Above weight threshold (≥ {pref.min_weight}) (+5)")
 
         # Attribute scores
         for attr, val in {
@@ -90,22 +107,44 @@ def vectorized_rule_scoring(df: pd.DataFrame, req: RecommendRequest):
         }.items():
             if attr in row.attrs:
                 s += val
+                reason.append(f"Attribute match: {attr} (+{val})")
+
 
         # Gender logic
         if gender == "female":
-            if any(t in row.tags for t in ["glutes", "core", "abs"]): s += 6
-            if any(a in row.attrs for a in ["compact", "adjustable"]): s += 3
+            if any(t in row.tags for t in ["glutes", "core", "abs"]): 
+                s += 6
+                reason.append("Female: glutes/core/abs match (+6)")
+
+            if any(a in row.attrs for a in ["compact", "adjustable"]):
+                s += 3
+                reason.append("Female: compact/adjustable attribute (+3)")
+
         elif gender == "male":
-            if any(t in row.tags for t in ["arms", "chest", "pull-up"]): s += 6
-            if "heavy" in row.text or row.weight >= 60: s += 4
+            if any(t in row.tags for t in ["arms", "chest", "pull-up"]): 
+                s += 6
+                reason.append("Male: arms/chest/pull-up match (+6)")
+
+            if "heavy" in row.text or row.weight >= 60: 
+                s += 4
+                reason.append("Male: heavy or weight ≥ 60 (+4)")
+
 
         # Age logic
         if req.age:
             if req.age >= 50:
-                if any(t in row.tags for t in ["low-impact", "joint-friendly", "post-injury"]): s += 10
-                if row.weight < 40: s += 4
+                if any(t in row.tags for t in ["low-impact", "joint-friendly", "post-injury"]): 
+                    s += 10
+                    reason.append("Age ≥ 50: senior-friendly tags (+10)")
+
+                if row.weight < 40: 
+                    s += 4
+                    reason.append("Age ≥ 50: lightweight (<40) equipment (+4)")
+
             elif req.age < 18:
                 s += 3
+                reason.append("Under 18: youth-friendly bias (+3)")
+
 
         # Goal → Tag
         goal_tags = {
@@ -126,30 +165,50 @@ def vectorized_rule_scoring(df: pd.DataFrame, req: RecommendRequest):
         for tag in goal_tags.get(goal, []):
             if tag in row.tags:
                 s += 4
+                reason.append(f"Goal tag match: {tag} (+4)")
+
             if tag in row.attrs:
                 s += 2
+                reason.append(f"Goal attr match: {tag} (+2)")
 
-        # Experience
-        if experience == "beginner" and "beginner-friendly" in row.tags: s += 6
-        elif experience == "intermediate" and "intermediate" in row.tags: s += 4
-        elif experience == "advanced" and "advanced" in row.tags: s += 4
+  # Experience
+        if experience == "beginner" and tag_match(row.tags, "beginner-friendly"):
+            s += 6
+            reason.append("Experience: beginner-friendly tag (+6)")
+        elif experience == "intermediate" and tag_match(row.tags, "intermediate"):
+            s += 4
+            reason.append("Experience: intermediate tag (+4)")
+        elif experience == "advanced" and tag_match(row.tags, "advanced"):
+            s += 4
+            reason.append("Experience: advanced tag (+4)")
         elif experience == "athlete":
-            if "athlete" in row.tags or row.weight > 80: s += 6
+            if tag_match(row.tags, "athlete") or row.weight > 80:
+                s += 6
+                reason.append("Experience: athlete match or heavy weight (>80) (+6)")
         elif experience == "elderly":
-            if any(t in row.tags for t in ["elderly", "joint-friendly"]) or "low-impact" in row.attrs:
+            if any(tag_match(row.tags, t) for t in ["elderly", "joint-friendly"]) or attr_match(row.attrs, "low-impact"):
                 s += 8
+                reason.append("Experience: elderly-friendly match (+8)")
 
         # Height/Weight
-        if req.weight and req.weight >= 90: s += 3
-        if req.height and req.height >= 190: s += 2
+        if req.weight and req.weight >= 90:
+            s += 3
+            reason.append("Weight ≥ 90kg (+3)")
+        if req.height and req.height >= 190:
+            s += 2
+            reason.append("Height ≥ 190cm (+2)")
 
         # User type
-        if user_type == "athlete": s += 3
-        elif user_type == "elderly": s += 5
-
+        if user_type == "athlete":
+            s += 3
+            reason.append("User type: athlete (+3)")
+        elif user_type == "elderly":
+            s += 5
+            reason.append("User type: elderly (+5)")
         score[i] = s
+        explanations[i] = "; ".join(reason) if reason else "No scoring rules matched"
 
-    return score
+    return score, explanations
 
 def get_recommendations(req: RecommendRequest):
     user_text = build_user_text(req)
@@ -174,18 +233,22 @@ def get_recommendations(req: RecommendRequest):
 
     # Prepare DataFrame for batch scoring
     df = prepare_options_dataframe(matched_options)
-    rule_scores = vectorized_rule_scoring(df, req)
+    rule_scores, explanations = vectorized_rule_scoring(df, req)
 
     # Combine scores
     similarities = np.array(similarities)
     df["embedding_similarity"] = similarities * 10
     df["rule_score"] = rule_scores
     df["score"] = df["embedding_similarity"] + df["rule_score"]
+    df["rule_explanation"] = explanations
+
 
     # Inject scores and optional debug into the original option dict
     for idx, row in df.iterrows():
         opt = df.at[idx, "data"]
         opt["score"] = float(row["score"])
+        opt["rule_applied"] = row["rule_explanation"]
+
         if config.DEBUG:
             opt["__debug"] = {
                 "embedding_similarity": round(row["embedding_similarity"], 2),
