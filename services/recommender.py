@@ -7,8 +7,6 @@ from utils.text import build_user_text, clean_text
 from models.schema import RecommendRequest
 import faiss
 from utils.equipment import prepare_options_dataframe
-import matplotlib.pyplot as plt
-import seaborn as sns
 
 
 # Load model only once
@@ -244,8 +242,7 @@ def get_recommendations(req: RecommendRequest):
     df["score"] = df["embedding_similarity"] + df["rule_score"]
     df["rule_explanation"] = explanations
 
-    if config.DEBUG:
-        plot_recommendation_heatmap(df)
+
     # Inject scores and optional debug into the original option dict
     for idx, row in df.iterrows():
         opt = df.at[idx, "data"]
@@ -267,96 +264,3 @@ def get_recommendations(req: RecommendRequest):
             seen[eq_id] = opt
 
     return list(seen.values())[:100]
-
-
-def evaluate_recommender(req: RecommendRequest, mode="hybrid", top_k=20, plot=False):
-    user_text = build_user_text(req)
-    user_vector = MODEL.encode(user_text, convert_to_tensor=False).reshape(1, -1).astype('float32')
-    faiss.normalize_L2(user_vector)
-
-    D, I = index.search(user_vector, k=1000)
-    matched_options, similarities = [], []
-
-    for i, sim in zip(I[0], D[0]):
-        option_id = IDS[i]
-        opt = OPTION_BY_ID.get(option_id)
-        if opt:
-            matched_options.append(opt)
-            similarities.append(sim)
-
-    if not matched_options:
-        return []
-
-    df = prepare_options_dataframe(matched_options)
-    rule_scores, explanations = vectorized_rule_scoring(df, req)
-
-    similarities = np.array(similarities)
-    df["embedding_similarity"] = similarities * 10
-    df["rule_score"] = rule_scores
-
-    if mode == "embedding_only":
-        df["score"] = df["embedding_similarity"]
-    elif mode == "rule_only":
-        df["score"] = df["rule_score"]
-    else:  # hybrid
-        df["score"] = df["embedding_similarity"] + df["rule_score"]
-
-    df["rule_explanation"] = explanations
-    
-
-
-    for idx, row in df.iterrows():
-        opt = df.at[idx, "data"]
-        opt["score"] = float(row["score"])
-        opt["rule_applied"] = row["rule_explanation"]
-        if config.DEBUG:
-            opt["__debug"] = {
-                "embedding_similarity": round(row["embedding_similarity"], 2),
-                "rule_score": round(row["rule_score"], 2),
-                "user_text": user_text
-            }
-
-    top = sorted(df["data"], key=lambda o: o["score"], reverse=True)[:top_k]
-
-    if plot:
-        plt.figure(figsize=(10, 4))
-        sns.histplot(df["score"], bins=30, kde=True)
-        plt.title(f"Score Distribution — Mode: {mode}")
-        plt.xlabel("Score")
-        plt.ylabel("Frequency")
-        plt.grid(True)
-        plt.tight_layout()
-        plt.show()
-
-    return top
-
-def diversity_score(recommendation_list):
-    return len(set(opt.get("equipment_id") for opt in recommendation_list))
-
-
-def get_equipment_name(opt):
-    name = opt.get("equipment_name") or ""
-    brand = opt.get("brand") or ""
-    return f"{name} ({brand})" if name else opt.get("option_id", "")[:8]
-
-def plot_recommendation_heatmap(df: pd.DataFrame, top_n: int = 30):
-    if df.empty:
-        print("No data to plot.")
-        return
-
-    plot_df = df.sort_values("score", ascending=False).head(top_n).copy()
-    plot_df["name"] = plot_df["data"].apply(get_equipment_name)
-    plot_df["matched_tags"] = plot_df["rule_explanation"].apply(
-    lambda r: sum(1 for part in r.split("; ") if "Matched tags" in part)
-)
-    
-    heatmap_data = plot_df[["embedding_similarity", "rule_score", "matched_tags"]]
-    heatmap_data.index = plot_df["name"]
-
-    plt.figure(figsize=(12, max(6, 0.4 * len(plot_df))))
-    sns.heatmap(heatmap_data, annot=True, fmt=".1f", cmap="YlGnBu", linewidths=0.5)
-    plt.title("Top Recommendation Scores Heatmap")
-    plt.xlabel("Score Component")
-    plt.ylabel("Equipment Option")
-    plt.tight_layout()
-    plt.show()
