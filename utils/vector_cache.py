@@ -9,8 +9,6 @@ def save_vector_cache(cache):
         return
     with open("data/vector_cache.json", "wb") as f:
         f.write(json.dumps(cache))
-        
-
 
 def load_vector_cache():
     if not os.path.exists(VECTOR_CACHE_PATH):

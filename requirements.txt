@@ -6,3 +6,5 @@ python-dotenv
 faiss-cpu
 orjson
 pandas
+matplotlib
+seaborn
