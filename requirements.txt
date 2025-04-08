@@ -1,8 +1,10 @@
 fastapi
 uvicorn
+accelerate
 sentence-transformers[sentencepiece]
 numpy
 python-dotenv
 faiss-cpu
 orjson
 pandas
+huggingface_hub[hf_xet]
