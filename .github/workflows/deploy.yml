@@ -36,6 +36,10 @@ jobs:
       - name: Configure Docker authentication
         run: gcloud auth configure-docker
 
+      - name: Debug secrets
+        run: |
+          echo ">>>${{ secrets.GCP_PROJECT_ID }}<<<"
+
       - name: Build and push Docker image
         run: |
           IMAGE_NAME=gcr.io/${{ secrets.GCP_PROJECT_ID }}/e-cercise-recommend-service
